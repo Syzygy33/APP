@@ -57,6 +57,8 @@ app.*.map.json
 /dist/
 *.apk
 *.aab
+# 例外：release/ 下要放可下载的安装包，显式放行
+!/release/*.apk
 
 # 调试截图与录屏（含真实笔记内容，不上传）
 /preview/
