@@ -1,0 +1,16 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # prism_ui 是 vendored 第三方代码，不参与本项目的严格检查
+    invalid_annotation_target: ignore
+  exclude:
+    - build/**
+    - web/**
+    - android/**
+
+linter:
+  rules:
+    prefer_single_quotes: true
+    always_declare_return_types: true
+    unawaited_futures: true

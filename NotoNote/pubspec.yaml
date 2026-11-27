@@ -1,0 +1,52 @@
+name: noto_note
+description: "NotoNote —— 基于 prism_ui 设计系统构建的应用"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+  # prism_ui 用到 RoundedSuperellipseBorder / clipRSuperellipse，必须是较新的 SDK
+  flutter: '>=3.47.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  prism_ui:
+    path: plugins/prism_ui
+  # 本地持久化：整表 JSON 存 KV。数据量到 1MB 量级时换 sqflite
+  # 限制在 2.4.x：2.5.x 的 shared_preferences_android 依赖 jni 插件，
+  # 后者带 C++ 源码，构建 APK 需要 NDK + CMake（约 1.5 GB）。
+  # App 只用 getInstance() 这一套老接口，2.4.x 行为一致。
+  shared_preferences: ">=2.4.0 <2.5.0"
+  # WebDAV 备份：纯 Dart 实现（浏览器走 fetch），不引入原生插件，
+  # 所以不会像 shared_preferences 2.5 那样把 APK 构建拖进 CMake/NDK。
+  http: ^1.2.0
+  # 本地备份导出 / 恢复要调系统的「存到哪儿」和文件选择器：
+  # Android 走 SAF（ACTION_CREATE_DOCUMENT / OPEN_DOCUMENT，不需要存储权限），
+  # 纯 Kotlin 实现、无 C++ 源码，不影响现有 NDK 那套；Web 端 saveFile 触发下载。
+  file_picker: ^10.2.0
+  # 笔记附件：相册多选与直接拍照。Android 端是 Kotlin ActivityResult，
+  # 压缩在插件内部完成（maxWidth/imageQuality），没有 C++ 依赖；
+  # Web 端走 input[type=file]，不压缩，所以这边另有 maxBytes 兜底。
+  image_picker: ^1.1.2
+  flutter_local_notifications: ^23.0.3
+  timezone: ^0.11.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  # prism_ui 的 test/helpers 依赖它；path 依赖的 dev_dependencies 不会被解析，
+  # 必须在根包里声明一次，否则 analyze 会报 package:flutter_localizations 找不到
+  flutter_localizations:
+    sdk: flutter
+
+flutter:
+  # 不引入 Material 图标字体：本项目的 UI 全部来自 prism_ui 的矢量 Glyph
+  generate: false
+
+dependency_overrides:
+  # 2.5.x 的 Android 实现依赖 jni 插件，后者自带 C++ 源码，
+  # 构建 APK 会强制要求 NDK + CMake（约 1.5 GB）。
+  # 2.4.28 仍是 Kotlin/Pigeon 实现，无原生构建，接口兼容。
+  shared_preferences_android: 2.4.28

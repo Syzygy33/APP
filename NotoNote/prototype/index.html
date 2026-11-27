@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NotoNote 交互原型</title>
+<style>
+/* ─────────────────────────────────────────────
+   设计令牌：取自 prism_ui（种子色 #007AFF，ColorStyle.soft）
+   圆角用超椭圆的近似（border-radius + 轻微连续曲面感）
+   ───────────────────────────────────────────── */
+:root{
+  --seed:#007AFF;
+  --primary:#0A7CFF;
+  --primary-dim:rgba(10,124,255,.12);
+  --bg:#F2F2F7;
+  --surface:#FFFFFF;
+  --surface-2:#FFFFFF;
+  --inset:#ECECF1;
+  --text:#000000;
+  --text-2:#8A8A8E;
+  --text-3:#B0B0B5;
+  --sep:rgba(60,60,67,.14);
+  --dock:rgba(255,255,255,.86);
+  --dock-border:rgba(0,0,0,.04);
+  --shadow:0 8px 30px rgba(0,0,0,.10);
+  --danger:#FF3B30;
+  --ok:#34C759;
+  --r-card:24px;
+  --r-group:26px;
+  --r-field:14px;
+  --t1:28px/34px; --t2:22px/28px; --t3:20px/25px;
+  --t-body:17px/22px; --t-sub:15px/20px; --t-foot:13px/18px;
+  --ease:cubic-bezier(.32,.72,0,1);
+}
+html[data-theme="dark"]{
+  --primary:#0A84FF;
+  --primary-dim:rgba(10,132,255,.18);
+  --bg:#000000;          /* pureBlack：深色模式页面是纯黑 */
+  --surface:#1C1C1E;
+  --surface-2:#2C2C2E;
+  --inset:#1C1C1E;
+  --text:#FFFFFF;
+  --text-2:#8E8E93;
+  --text-3:#5A5A5E;
+  --sep:rgba(255,255,255,.12);
+  --dock:rgba(28,28,30,.82);
+  --dock-border:rgba(255,255,255,.08);
+  --shadow:0 10px 34px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI","PingFang SC",
+              "Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+  background:#C9CCD3;
+  color:var(--text);
+  display:grid;
+  place-items:center;
+  transition:background .3s var(--ease);
+}
+html[data-theme="dark"] body{background:#111}
+
+/* 手机框 */
+.phone{
+  position:relative;
+  width:min(430px,100vw);
+  height:min(920px,100dvh);
+  background:var(--bg);
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  transition:background .3s var(--ease);
+}
+@media (min-width:520px) and (min-height:700px){
+  .phone{border-radius:44px;box-shadow:0 30px 80px rgba(0,0,0,.35);height:min(880px,94dvh)}
+}
+
+/* ── 页面容器 ── */
+.viewport{position:relative;flex:1;overflow:hidden}
+.page{
+  position:absolute;inset:0;
+  overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  padding-bottom:104px;              /* 给悬浮导航留位 */
+  opacity:0;visibility:hidden;
+  transition:opacity .22s var(--ease), transform .22s var(--ease);
+  transform:scale(.985);
+}
+.page.active{opacity:1;visibility:visible;transform:none}
+.page::-webkit-scrollbar{width:0}
+
+/* ── 顶栏：浮动、半透明、向下渐隐 ── */
+.bar{
+  position:sticky;top:0;z-index:20;
+  display:flex;align-items:center;gap:8px;
+  height:72px;padding:0 20px;
+  background:linear-gradient(var(--bg) 58%,transparent);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+.bar h1{font:600 var(--t3);letter-spacing:0;margin:0;flex:1;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .spacer{flex:1}
+
+/* ── 顶栏按钮 ── */
+.pill-btn{
+  height:44px;padding:0 18px;border:0;border-radius:999px;
+  background:var(--surface);color:var(--text);
+  font:600 16px/44px inherit;font-family:inherit;
+  box-shadow:0 1px 3px rgba(0,0,0,.08);
+  cursor:pointer;transition:transform .18s var(--ease),background .18s;
+}
+.pill-btn:active{transform:scale(.94);background:var(--inset)}
+.icon-btn{
+  width:44px;height:44px;flex:0 0 44px;border:0;border-radius:999px;
+  background:transparent;color:var(--text);
+  display:grid;place-items:center;cursor:pointer;
+  transition:transform .18s var(--ease),background .18s;
+}
+.icon-btn:active{transform:scale(.9);background:var(--inset)}
+.icon-btn.primary{color:var(--primary)}
+
+/* ── 搜索框 ── */
+.search{
+  display:flex;align-items:center;gap:8px;
+  margin:4px 16px 4px;height:40px;padding:0 12px;
+  background:var(--inset);border-radius:12px;color:var(--text-2);
+}
+.search input{
+  flex:1;border:0;outline:0;background:transparent;
+  font:400 17px/1 inherit;font-family:inherit;color:var(--text);
+}
+.search input::placeholder{color:var(--text-2)}
+.search .clear{display:none;border:0;background:transparent;color:var(--text-3);
+  cursor:pointer;padding:4px}
+.search.has-text .clear{display:block}
+
+/* ── 卡片 ── */
+.list{padding:4px 16px 0;display:flex;flex-direction:column;gap:12px}
+.card{
+  background:var(--surface);border-radius:var(--r-card);
+  padding:16px;cursor:pointer;
+  box-shadow:0 1px 2px rgba(0,0,0,.04);
+  transition:transform .16s var(--ease),box-shadow .2s;
+  position:relative;
+}
+.card:active{transform:scale(.983)}
+.card .row{display:flex;align-items:flex-start;gap:8px}
+.card .title{font:600 var(--t-body);margin:0;flex:1;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .excerpt{font:400 var(--t-sub);color:var(--text-2);
+  margin:6px 0 0;display:-webkit-box;-webkit-line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden}
+.card .meta{display:flex;align-items:center;gap:10px;margin-top:8px;
+  font:400 var(--t-foot);color:var(--text-3)}
+.card mark{background:transparent;color:var(--primary);font-weight:600}
+.card .pin{color:var(--primary);display:flex}
+.card .star-on{color:#FFB300}
+.chip{display:inline-flex;align-items:center;height:22px;padding:0 8px;
+  border-radius:999px;background:var(--inset);font:400 12px/22px inherit;
+  font-family:inherit;color:var(--text-2)}
+
+/* ── 分组（设置页的形态） ── */
+.group{margin:8px 16px 0;border-radius:var(--r-group);overflow:hidden;
+  background:var(--surface)}
+.group-title{font:600 13px/18px inherit;font-family:inherit;color:var(--text-2);
+  margin:22px 16px 8px;letter-spacing:.02em}
+.group-foot{font:400 13px/18px inherit;font-family:inherit;color:var(--text-2);
+  margin:8px 20px 0}
+.item{display:flex;align-items:center;gap:12px;padding:11px 16px;
+  min-height:48px;position:relative;background:transparent;border:0;width:100%;
+  text-align:left;cursor:pointer;font-family:inherit;color:var(--text)}
+.item + .item::before{content:"";position:absolute;left:16px;right:0;top:0;
+  height:1px;background:var(--sep)}
+.item .t{font:400 var(--t-body);flex:1;margin:0}
+.item .sub{display:block;font:400 var(--t-foot);color:var(--text-2);
+  margin-top:2px}
+.item .v{font:400 var(--t-body);color:var(--text-2);display:flex;
+  align-items:center;gap:4px}
+
+/* 开关 */
+.switch{width:51px;height:31px;border-radius:999px;background:var(--text-3);
+  position:relative;flex:0 0 51px;transition:background .22s var(--ease);border:0;
+  cursor:pointer;padding:0}
+.switch.on{background:var(--ok)}
+.switch i{position:absolute;top:2px;left:2px;width:27px;height:27px;
+  border-radius:50%;background:#fff;transition:transform .22s var(--ease);
+  box-shadow:0 2px 4px rgba(0,0,0,.2)}
+.switch.on i{transform:translateX(20px)}
+
+/* ── 空状态 ── */
+.empty{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;padding:48px 32px;gap:0}
+.empty .art{width:120px;height:120px;display:grid;place-items:center;
+  color:var(--primary);margin-bottom:20px;position:relative}
+.empty .art .blob{position:absolute;inset:14px;border-radius:44% 56% 52% 48%/50%;
+  background:var(--primary-dim)}
+.empty .art svg{position:relative;z-index:1}
+.empty h3{font:600 var(--t-body);margin:0 0 6px}
+.empty p{font:400 var(--t-sub);color:var(--text-2);margin:0 0 20px;max-width:260px}
+.empty .pill-btn{box-shadow:0 2px 10px rgba(10,124,255,.18)}
+
+/* ── 底部悬浮导航 ── */
+.dock-wrap{position:absolute;left:0;right:0;bottom:0;padding:0 16px 16px;
+  pointer-events:none;z-index:30}
+.dock{
+  pointer-events:auto;height:64px;display:flex;align-items:center;
+  gap:4px;padding:6px;border-radius:999px;
+  background:var(--dock);border:1px solid var(--dock-border);
+  backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);
+  box-shadow:var(--shadow);
+}
+.tab{
+  position:relative;flex:1;height:52px;border:0;background:transparent;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;border-radius:999px;cursor:pointer;color:var(--text-2);
+  font:400 11px/1 inherit;font-family:inherit;
+  transition:color .2s var(--ease),transform .18s var(--ease);
+  -webkit-user-select:none;user-select:none;
+}
+.tab svg{transition:transform .24s var(--ease)}
+.tab::before{
+  content:"";position:absolute;inset:2px;border-radius:999px;
+  background:var(--primary-dim);opacity:0;transform:scale(.82);
+  transition:opacity .24s var(--ease),transform .24s var(--ease);
+}
+.tab.on{color:var(--primary)}
+.tab.on::before{opacity:1;transform:none}
+.tab.on svg{transform:translateY(-1px) scale(1.06)}
+.tab:active{transform:scale(.95)}
+
+/* ── 详情 / 表单：底部抽屉 ── */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.28);opacity:0;
+  visibility:hidden;transition:opacity .26s var(--ease);z-index:40}
+.scrim.show{opacity:1;visibility:visible}
+.sheet{
+  position:absolute;left:0;right:0;bottom:0;z-index:41;
+  max-height:88%;display:flex;flex-direction:column;
+  background:var(--surface);border-radius:28px 28px 0 0;
+  transform:translateY(102%);transition:transform .34s var(--ease);
+  box-shadow:0 -10px 40px rgba(0,0,0,.18);
+}
+.sheet.show{transform:none}
+.sheet .grab{width:36px;height:5px;border-radius:99px;background:var(--text-3);
+  margin:8px auto 0;opacity:.6}
+.sheet .head{display:flex;align-items:center;gap:8px;padding:10px 16px 6px}
+.sheet .head h2{font:600 var(--t3);margin:0;flex:1}
+.sheet .body{padding:0 20px 20px;overflow-y:auto}
+.sheet .body p{font:400 var(--t-body);margin:0 0 10px;color:var(--text)}
+.sheet .meta{font:400 var(--t-foot);color:var(--text-2);margin-bottom:16px}
+.sheet textarea,.sheet input[type=text]{
+  width:100%;border:0;outline:0;background:transparent;font-family:inherit;
+  color:var(--text);resize:none;
+}
+.sheet input[type=text]{font:600 var(--t2);padding:8px 0}
+.sheet textarea{font:400 var(--t-body);min-height:180px;padding:6px 0}
+.sheet .foot{padding:10px 20px calc(20px + env(safe-area-inset-bottom));
+  display:flex;gap:10px}
+.btn-primary{flex:1;height:48px;border:0;border-radius:999px;
+  background:var(--primary);color:#fff;font:600 16px/48px inherit;
+  font-family:inherit;cursor:pointer;transition:transform .16s var(--ease)}
+.btn-primary:active{transform:scale(.97)}
+.btn-ghost{height:48px;padding:0 22px;border:0;border-radius:999px;
+  background:var(--inset);color:var(--text);font:600 16px/48px inherit;
+  font-family:inherit;cursor:pointer}
+.btn-danger{background:var(--danger);color:#fff}
+
+/* 顶栏下拉菜单 */
+.menu{position:absolute;top:8px;right:14px;z-index:50;min-width:160px;
+  padding:6px;border-radius:18px;background:var(--surface);
+  box-shadow:0 12px 40px rgba(0,0,0,.22);
+  opacity:0;visibility:hidden;transform:translateY(-6px) scale(.97);
+  transition:.18s var(--ease)}
+.menu.show{opacity:1;visibility:visible;transform:none}
+.menu button{display:flex;align-items:center;gap:10px;width:100%;border:0;
+  background:transparent;padding:12px 14px;border-radius:12px;
+  font:400 var(--t-body);font-family:inherit;color:var(--text);cursor:pointer;
+  text-align:left}
+.menu button:active{background:var(--inset)}
+.menu button.danger{color:var(--danger)}
+
+/* 待办 */
+.todo{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;
+  background:var(--surface);border-radius:20px;cursor:pointer;
+  transition:transform .16s var(--ease)}
+.todo:active{transform:scale(.985)}
+.todo .box{width:24px;height:24px;flex:0 0 24px;border-radius:50%;
+  border:2px solid var(--text-3);display:grid;place-items:center;
+  transition:.2s var(--ease)}
+.todo.done .box{background:var(--ok);border-color:var(--ok);color:#fff}
+.todo .tx{flex:1}
+.todo .tx b{font:500 var(--t-body);display:block}
+.todo.done .tx b{text-decoration:line-through;color:var(--text-2)}
+.todo .tx span{font:400 var(--t-foot);color:var(--text-2)}
+
+/* 分类网格 */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px 16px 0}
+.cat{background:var(--surface);border-radius:22px;padding:16px;
+  display:flex;flex-direction:column;gap:10px;cursor:pointer;
+  transition:transform .16s var(--ease)}
+.cat:active{transform:scale(.97)}
+.cat .dot{width:34px;height:34px;border-radius:12px;display:grid;place-items:center}
+.cat b{font:600 var(--t-body)}
+.cat span{font:400 var(--t-foot);color:var(--text-2)}
+
+/* 轻提示 */
+.toast{position:absolute;left:50%;bottom:104px;transform:translate(-50%,10px);
+  background:rgba(0,0,0,.8);color:#fff;font:400 14px/1 inherit;font-family:inherit;
+  padding:12px 18px;border-radius:999px;opacity:0;visibility:hidden;
+  transition:.24s var(--ease);z-index:60;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1;visibility:visible;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+
+  <div class="viewport" id="viewport">
+
+    <!-- 笔记 -->
+    <section class="page active" data-page="notes">
+      <header class="bar">
+        <h1>笔记</h1>
+        <button class="pill-btn" data-act="new-note">新建</button>
+        <button class="icon-btn" data-act="menu" aria-label="更多">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/>
+            <circle cx="12" cy="19" r="1.8"/>
+          </svg>
+        </button>
+      </header>
+      <div class="search" id="searchBox">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+        </svg>
+        <input id="searchInput" type="text" placeholder="搜索笔记" autocomplete="off">
+        <button class="clear" data-act="clear-search" aria-label="清空">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 3a9 9 0 100 18 9 9 0 000-18zm3.5 11.1l-1.4 1.4L12 13.4l-2.1 2.1-1.4-1.4L10.6 12 8.5 9.9l1.4-1.4L12 10.6l2.1-2.1 1.4 1.4L13.4 12l2.1 2.1z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="list" id="noteList"></div>
+      <div id="noteEmpty"></div>
+    </section>
+
+    <!-- 待办 -->
+    <section class="page" data-page="todo">
+      <header class="bar">
+        <h1>待办</h1>
+        <button class="pill-btn" data-act="new-todo">添加</button>
+      </header>
+      <div class="list" id="todoList" style="gap:10px"></div>
+      <div id="todoEmpty"></div>
+    </section>
+
+    <!-- 分类 -->
+    <section class="page" data-page="category">
+      <header class="bar"><h1>分类</h1></header>
+      <div class="grid" id="catGrid"></div>
+    </section>
+
+    <!-- 收藏 -->
+    <section class="page" data-page="favorite">
+      <header class="bar"><h1>收藏</h1></header>
+      <div class="list" id="favList"></div>
+      <div id="favEmpty"></div>
+    </section>
+
+    <!-- 设置（从 ⋯ 菜单进入，覆盖式） -->
+    <section class="page" data-page="settings">
+      <header class="bar">
+        <button class="icon-btn primary" data-act="back" aria-label="返回">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+               stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <h1>设置</h1>
+      </header>
+
+      <div class="group-title">外观</div>
+      <div class="group">
+        <div class="item">
+          <div class="t">主题<span class="sub">深色模式页面用纯黑</span></div>
+          <div class="v">
+            <select id="themeSelect" style="border:0;background:transparent;
+              font:400 17px inherit;font-family:inherit;color:var(--text-2);
+              outline:0;appearance:none">
+              <option value="light">浅色</option>
+              <option value="dark">深色</option>
+            </select>
+          </div>
+        </div>
+        <div class="item">
+          <div class="t">种子色</div>
+          <div class="v">
+            <span style="width:22px;height:22px;border-radius:50%;
+              background:#007AFF;display:inline-block"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="group-title">控件</div>
+      <div class="group">
+        <div class="item">
+          <div class="t">新笔记默认收藏</div>
+          <button class="switch" data-act="toggle-autofav" aria-label="开关"><i></i></button>
+        </div>
+        <div class="item">
+          <div class="t">列表密度</div>
+          <div class="v">标准</div>
+        </div>
+      </div>
+      <div class="group-foot">这一页验证的是分组列表形态：一张大卡 + 分隔线 + 首尾收边。</div>
+      <div style="height:120px"></div>
+    </section>
+
+  </div><!-- /viewport -->
+
+  <!-- 顶栏菜单 -->
+  <div class="menu" id="menu">
+    <button data-act="go-settings">设置</button>
+    <button data-act="theme-toggle">切换深浅色</button>
+  </div>
+
+  <!-- 悬浮导航 -->
+  <div class="dock-wrap">
+    <nav class="dock" id="dock">
+      <button class="tab on" data-tab="notes">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+             stroke-linejoin="round">
+          <path d="M9.4 6.2H6.5A2.5 2.5 0 004 8.7v11a2.5 2.5 0 002.5 2.5h11a2.5 2.5 0 002.5-2.5V15"/>
+          <path d="M9 15.2l4.75-1.25 7-7-3.5-3.5-7 7L9 15.2z"/>
+        </svg>
+        <span>笔记</span>
+      </button>
+      <button class="tab" data-tab="todo">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+             stroke-linejoin="round">
+          <circle cx="12" cy="12" r="8.8"/>
+          <path d="M7.6 12.3l2.9 2.9 5.9-6.4"/>
+        </svg>
+        <span>待办</span>
+      </button>
+      <button class="tab" data-tab="category">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+             stroke-linejoin="round">
+          <path d="M12 3l8.8 4.6L12 12.2 3.2 7.6 12 3z"/>
+          <path d="M3.2 12L12 16.6 20.8 12"/>
+          <path d="M3.2 16.4L12 21l8.8-4.6"/>
+        </svg>
+        <span>分类</span>
+      </button>
+      <button class="tab" data-tab="favorite">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+             stroke-linejoin="round">
+          <path d="M12 3.2l2.41 6.28 6.72.35-5.23 4.24 1.74 6.5L12 16.9l-5.64 3.67 1.74-6.5L2.87 9.83l6.72-.35L12 3.2z"/>
+        </svg>
+        <span>收藏</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- 抽屉 -->
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet">
+    <div class="grab"></div>
+    <div class="head">
+      <h2 id="sheetTitle">标题</h2>
+      <button class="icon-btn" data-act="close-sheet" aria-label="关闭">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="body" id="sheetBody"></div>
+    <div class="foot" id="sheetFoot"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────
+   状态：笔记 / 待办 / 分类，存在 localStorage
+   ───────────────────────────────────────────── */
+const SEED = [
+  {id:'n1', title:'prism_ui 的四级表面', body:'page → card → block → inset。卡片里再放卡片要升一级表面色，而不是加阴影。这是这套设计扁平但有层次的关键。', cat:'设计', at:Date.now()-12*60e3, pinned:true, fav:true, done:false},
+  {id:'n2', title:'顶栏为什么必须浮动', body:'PrismScaffold 把状态栏 + 72 塞进 body 的 MediaQuery 顶部内边距。页面不消费它，第一个控件就会被标题栏盖住。', cat:'开发', at:Date.now()-3*3600e3, pinned:false, fav:false, done:false},
+  {id:'n3', title:'超椭圆与普通圆角的差别', body:'圆角用 RoundedSuperellipseBorder，曲率连续，边缘更"鼓"。小圆角看不太出来，但光标尺量能看出差别。', cat:'设计', at:Date.now()-26*3600e3, pinned:false, fav:true, done:false},
+  {id:'n4', title:'今天的采购清单', body:'牛奶、鸡蛋、面包、咖啡豆。顺路去取快递。', cat:'生活', at:Date.now()-2*86400e3, pinned:false, fav:false, done:false}
+];
+const TODOS = [
+  {id:'t1', text:'补完 Android SDK 安装', sub:'platform-tools + build-tools + API 36', done:false},
+  {id:'t2', text:'真机跑一次冒烟测试', sub:'重点看变高列表的滚动', done:false},
+  {id:'t3', text:'确定品牌种子色', sub:'当前沿用 #007AFF', done:true}
+];
+const CATS = [
+  {name:'设计', color:'#0A7CFF'},
+  {name:'开发', color:'#34C759'},
+  {name:'生活', color:'#FF9F0A'},
+  {name:'未分类', color:'#8E8E93'}
+];
+
+const store = {
+  load(){
+    try{
+      const raw = JSON.parse(localStorage.getItem('noto.prototype') || 'null');
+      if(raw && raw.notes){ return raw; }
+    }catch(e){}
+    return {notes:SEED, todos:TODOS, theme:'light', autoFav:false};
+  },
+  save(s){ try{ localStorage.setItem('noto.prototype', JSON.stringify(s)); }catch(e){} }
+};
+
+let state = store.load();
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* 相对时间 */
+function rel(ts){
+  const d = Date.now() - ts, m = 60e3, h = 3600e3, day = 86400e3;
+  if(d < m) return '刚刚';
+  if(d < h) return Math.floor(d/m) + ' 分钟前';
+  if(d < day) return Math.floor(d/h) + ' 小时前';
+  if(d < day*2) return '昨天';
+  if(d < day*7) return Math.floor(d/day) + ' 天前';
+  const t = new Date(ts);
+  return (t.getMonth()+1) + '月' + t.getDate() + '日';
+}
+
+/* 高亮命中 */
+function hl(text, q){
+  if(!q) return esc(text);
+  const lower = text.toLowerCase(), needle = q.toLowerCase();
+  let out = '', i = 0;
+  while(true){
+    const k = lower.indexOf(needle, i);
+    if(k < 0){ out += esc(text.slice(i)); break; }
+    out += esc(text.slice(i,k)) + '<mark>' + esc(text.slice(k, k+needle.length)) + '</mark>';
+    i = k + needle.length;
+  }
+  return out;
+}
+const excerpt = n => n.body.replace(/\s+/g,' ').slice(0, 80);
+
+/* ─────────────────────────────────────────────
+   渲染
+   ───────────────────────────────────────────── */
+function renderNotes(){
+  const q = $('#searchInput').value.trim();
+  const box = $('#searchBox');
+  box.classList.toggle('has-text', !!q);
+  const list = state.notes
+    .slice()
+    .sort((a,b) => (b.pinned?1:0)-(a.pinned?1:0) || b.at-a.at)
+    .filter(n => !q || n.title.toLowerCase().includes(q.toLowerCase())
+                     || n.body.toLowerCase().includes(q.toLowerCase()));
+
+  const host = $('#noteList'), empty = $('#noteEmpty');
+  if(!list.length){
+    host.innerHTML = '';
+    empty.innerHTML = q
+      ? emptyHtml('没有匹配的结果', '试试别的关键词', null)
+      : emptyHtml('还没有笔记', '记下第一条，之后可以搜索和收藏', 'new-note', '新建笔记');
+    return;
+  }
+  empty.innerHTML = '';
+  host.innerHTML = list.map(n => `
+    <article class="card" data-open="${n.id}">
+      <div class="row">
+        <h3 class="title">${hl(n.title, q)}</h3>
+        ${n.pinned ? pinIcon() : ''}
+        ${n.fav ? starIcon(true) : ''}
+      </div>
+      <p class="excerpt">${hl(excerpt(n), q)}</p>
+      <div class="meta">
+        <span class="chip">${esc(n.cat||'未分类')}</span>
+        <span>${rel(n.at)}</span>
+      </div>
+    </article>`).join('');
+}
+
+function renderFav(){
+  const list = state.notes.filter(n => n.fav).sort((a,b)=>b.at-a.at);
+  const host = $('#favList'), empty = $('#favEmpty');
+  if(!list.length){
+    host.innerHTML = '';
+    empty.innerHTML = emptyHtml('还没有收藏', '在笔记里点星标，重要的内容会集中到这里', 'go-notes', '去笔记看看');
+    return;
+  }
+  empty.innerHTML = '';
+  host.innerHTML = list.map(n => `
+    <article class="card" data-open="${n.id}">
+      <div class="row">
+        <h3 class="title">${esc(n.title)}</h3>
+        ${starIcon(true)}
+      </div>
+      <p class="excerpt">${esc(excerpt(n))}</p>
+      <div class="meta"><span class="chip">${esc(n.cat||'未分类')}</span>
+        <span>${rel(n.at)}</span></div>
+    </article>`).join('');
+}
+
+function renderTodos(){
+  const host = $('#todoList'), empty = $('#todoEmpty');
+  if(!state.todos.length){
+    host.innerHTML = '';
+    empty.innerHTML = emptyHtml('还没有待办', '把要做的事记下来，做完打勾', 'new-todo', '添加待办');
+    return;
+  }
+  empty.innerHTML = '';
+  host.innerHTML = state.todos.map(t => `
+    <div class="todo ${t.done?'done':''}" data-todo="${t.id}">
+      <div class="box">
+        ${t.done ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="3.2" stroke-linecap="round"
+            stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>` : ''}
+      </div>
+      <div class="tx"><b>${esc(t.text)}</b><span>${esc(t.sub||'')}</span></div>
+    </div>`).join('');
+}
+
+function renderCats(){
+  $('#catGrid').innerHTML = CATS.map(c => {
+    const count = state.notes.filter(n => (n.cat||'未分类') === c.name).length;
+    return `<div class="cat" data-cat="${esc(c.name)}">
+      <div class="dot" style="background:${c.color}1F;color:${c.color}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round">
+          <path d="M12 3l8.8 4.6L12 12.2 3.2 7.6 12 3z"/>
+          <path d="M3.2 12L12 16.6 20.8 12"/>
+        </svg>
+      </div>
+      <b>${esc(c.name)}</b><span>${count} 条笔记</span></div>`;
+  }).join('');
+}
+
+const pinIcon = () => `<span class="pin"><svg width="13" height="13" viewBox="0 0 24 24"
+  fill="currentColor"><path d="M14.5 2.5l7 7-2.2 1.2-3.6 3.6-.6 4.4-8.8-8.8 4.4-.6 3.6-3.6 1.2-2.2z"/>
+  <path d="M8.5 15.5L2 22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>`;
+const starIcon = on => `<span class="${on?'star-on':''}" style="display:flex">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="${on?'currentColor':'none'}"
+       stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+    <path d="M12 3.2l2.41 6.28 6.72.35-5.23 4.24 1.74 6.5L12 16.9l-5.64 3.67
+             1.74-6.5L2.87 9.83l6.72-.35L12 3.2z"/></svg></span>`;
+
+function emptyHtml(title, desc, act, btn){
+  return `<div class="empty">
+    <div class="art"><div class="blob"></div>
+      <svg width="52" height="52" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+        <circle cx="11" cy="11" r="6.2"/><path d="M15.6 15.6L20 20"/>
+      </svg></div>
+    <h3>${esc(title)}</h3><p>${esc(desc)}</p>
+    ${act ? `<button class="pill-btn" data-act="${act}">${esc(btn)}</button>` : ''}
+  </div>`;
+}
+
+function renderAll(){ renderNotes(); renderFav(); renderTodos(); renderCats(); }
+
+/* ─────────────────────────────────────────────
+   交互
+   ───────────────────────────────────────────── */
+function toast(msg){
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+function setTheme(mode){
+  state.theme = mode;
+  document.documentElement.dataset.theme = mode;
+  $('#themeSelect').value = mode;
+  store.save(state);
+}
+
+let currentTab = 'notes';
+function go(tab){
+  if(tab !== 'settings'){ currentTab = tab; }
+  $$('.page').forEach(p => p.classList.toggle('active', p.dataset.page === tab));
+  $$('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  // 切页时把滚动位置复位，符合预期
+  const page = $(`.page[data-page="${tab}"]`);
+  if(page) page.scrollTop = 0;
+}
+
+/* 抽屉 */
+function openSheet(title, bodyHtml, footHtml){
+  $('#sheetTitle').textContent = title;
+  $('#sheetBody').innerHTML = bodyHtml;
+  $('#sheetFoot').innerHTML = footHtml || '';
+  $('#scrim').classList.add('show');
+  $('#sheet').classList.add('show');
+}
+function closeSheet(){
+  $('#scrim').classList.remove('show');
+  $('#sheet').classList.remove('show');
+}
+$('#scrim').addEventListener('click', closeSheet);
+
+/* 详情 */
+function openDetail(id){
+  const n = state.notes.find(x => x.id === id);
+  if(!n) return;
+  openSheet('笔记', `
+    <p style="font:600 var(--t2);margin:0 0 8px">${esc(n.title)}</p>
+    <div class="meta">${esc(n.cat||'未分类')} · ${rel(n.at)}
+      ${n.pinned ? ' · 已置顶' : ''}</div>
+    <p>${esc(n.body)}</p>`, `
+    <button class="btn-ghost" data-act="toggle-fav">${n.fav?'取消收藏':'收藏'}</button>
+    <button class="btn-ghost" data-act="toggle-pin">${n.pinned?'取消置顶':'置顶'}</button>
+    <button class="btn-ghost" data-act="edit">编辑</button>
+    <button class="btn-primary btn-danger" data-act="delete">删除</button>`);
+  $('#sheet').dataset.id = id;
+}
+
+/* 表单 */
+function openEditor(id){
+  const n = id ? state.notes.find(x => x.id === id) : null;
+  openSheet(n ? '编辑笔记' : '新建笔记', `
+    <input type="text" id="edTitle" placeholder="标题" value="${n?esc(n.title):''}">
+    <div class="meta" style="margin:4px 0 8px">正文</div>
+    <textarea id="edBody" placeholder="开始输入…">${n?esc(n.body):''}</textarea>`, `
+    <button class="btn-ghost" data-act="close-sheet">取消</button>
+    <button class="btn-primary" data-act="save" data-id="${id||''}">保存</button>`);
+  setTimeout(() => $('#edTitle').focus(), 320);
+}
+
+function saveEditor(id){
+  const title = $('#edTitle').value.trim() || '无标题';
+  const body = $('#edBody').value;
+  if(id){
+    const n = state.notes.find(x => x.id === id);
+    Object.assign(n, {title, body, at: Date.now()});
+  }else{
+    state.notes.unshift({
+      id: 'n' + Date.now(), title, body, cat: '未分类',
+      at: Date.now(), pinned: false, fav: !!state.autoFav, done: false
+    });
+  }
+  store.save(state); renderAll(); closeSheet(); toast('已保存');
+}
+
+/* 事件委托 */
+document.addEventListener('click', e => {
+  const tabBtn = e.target.closest('.tab');
+  if(tabBtn){ go(tabBtn.dataset.tab); return; }
+
+  const card = e.target.closest('[data-open]');
+  if(card){ openDetail(card.dataset.open); return; }
+
+  const todo = e.target.closest('[data-todo]');
+  if(todo){
+    const t = state.todos.find(x => x.id === todo.dataset.todo);
+    t.done = !t.done; store.save(state); renderTodos(); return;
+  }
+
+  const cat = e.target.closest('[data-cat]');
+  if(cat){ toast('分类「' + cat.dataset.cat + '」的筛选页还没接'); return; }
+
+  const act = e.target.closest('[data-act]');
+  if(!act) return;
+  const a = act.dataset.act;
+  const id = $('#sheet').dataset.id;
+
+  switch(a){
+    case 'new-note': openEditor(null); break;
+    case 'go-notes': go('notes'); break;
+    case 'edit': openEditor(id); break;
+    case 'save': saveEditor(act.dataset.id); break;
+    case 'delete':
+      state.notes = state.notes.filter(x => x.id !== id);
+      store.save(state); renderAll(); closeSheet(); toast('已删除'); break;
+    case 'toggle-fav': {
+      const n = state.notes.find(x => x.id === id);
+      n.fav = !n.fav; store.save(state); renderAll(); openDetail(id); break;
+    }
+    case 'toggle-pin': {
+      const n = state.notes.find(x => x.id === id);
+      n.pinned = !n.pinned; store.save(state); renderAll(); openDetail(id); break;
+    }
+    case 'close-sheet': closeSheet(); break;
+    case 'clear-search':
+      $('#searchInput').value = ''; renderNotes(); break;
+    case 'menu': $('#menu').classList.toggle('show'); break;
+    case 'go-settings':
+      $('#menu').classList.remove('show'); go('settings'); break;
+    case 'back': go(currentTab); break;
+    case 'theme-toggle':
+      $('#menu').classList.remove('show');
+      setTheme(state.theme === 'dark' ? 'light' : 'dark'); break;
+    case 'toggle-autofav': {
+      state.autoFav = !state.autoFav; store.save(state);
+      act.classList.toggle('on', state.autoFav); break;
+    }
+    case 'new-todo': {
+      openSheet('添加待办', `
+        <input type="text" id="edTitle" placeholder="要做什么">
+        <div class="meta" style="margin:4px 0 0">按回车或点保存</div>`, `
+        <button class="btn-ghost" data-act="close-sheet">取消</button>
+        <button class="btn-primary" data-act="save-todo">保存</button>`);
+      setTimeout(() => $('#edTitle').focus(), 320);
+      break;
+    }
+    case 'save-todo': {
+      const text = $('#edTitle').value.trim();
+      if(text){
+        state.todos.unshift({id:'t'+Date.now(), text, sub:'', done:false});
+        store.save(state); renderTodos(); closeSheet(); toast('已添加');
+      }else closeSheet();
+      break;
+    }
+  }
+});
+
+$('#searchInput').addEventListener('input', renderNotes);
+$('#themeSelect').addEventListener('change', e => setTheme(e.target.value));
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape'){ $('#menu').classList.remove('show'); closeSheet(); }
+  if(e.key === 'Enter' && $('#edTitle') && document.activeElement === $('#edTitle')){
+    const btn = $('#sheetFoot [data-act="save"], #sheetFoot [data-act="save-todo"]');
+    if(btn) btn.click();
+  }
+});
+document.addEventListener('click', e => {
+  if(!e.target.closest('#menu') && !e.target.closest('[data-act="menu"]')){
+    $('#menu').classList.remove('show');
+  }
+});
+
+/* 启动 */
+setTheme(state.theme || 'light');
+$('.switch').classList.toggle('on', !!state.autoFav);
+renderAll();
+</script>
+</body>
+</html>
